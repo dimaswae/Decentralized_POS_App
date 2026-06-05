@@ -1,0 +1,29 @@
+{
+  "name": "pos-crdt",
+  "version": "1.0.0",
+  "description": "Local-First POS with Automerge CRDT — Research Prototype",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build",
+    "electron": "electron .",
+    "test": "node tests/run.js",
+    "test:db": "node tests/db.test.js",
+    "test:crdt": "node tests/crdt.test.js",
+    "test:identity": "node tests/identity.test.js"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.0",
+    "concurrently": "^8.2.2",
+    "vite": "^5.0.0",
+    "wait-on": "^7.2.0"
+  },
+  "dependencies": {
+    "@automerge/automerge": "^2.2.9",
+    "electron": "^29.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "sql.js": "^1.14.1",
+    "uuid": "^14.0.0"
+  }
+}
