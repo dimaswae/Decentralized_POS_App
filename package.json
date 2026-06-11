@@ -4,27 +4,32 @@
   "description": "Local-First POS with Automerge CRDT — Research Prototype",
   "main": "electron/main.js",
   "scripts": {
-    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "build": "vite build",
-    "electron": "electron .",
-    "test": "node tests/run.js",
-    "test:db": "node tests/db.test.js",
-    "test:crdt": "node tests/crdt.test.js",
-    "test:identity": "node tests/identity.test.js"
+    "dev":       "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build":     "vite build",
+    "preview":   "vite preview",
+    "electron":  "electron .",
+    "relay":     "node relay/server.js",
+    "demo":      "node demo/run-demo.js",
+    "eval":      "node demo/evaluation.js",
+    "test":      "node tests/run.js && node tests/sync.test.js && node tests/conflict.test.js && node tests/phase6.test.js",
+    "test:p3":   "node tests/run.js",
+    "test:p4":   "node tests/sync.test.js",
+    "test:p5":   "node tests/conflict.test.js",
+    "test:p6":   "node tests/phase6.test.js"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^6.0.2",
-    "concurrently": "^8.2.2",
-    "vite": "^8.0.16",
-    "wait-on": "^7.2.0"
+    "@vitejs/plugin-react": "^4.2.0",
+    "concurrently":         "^8.2.2",
+    "vite":                 "^5.0.0",
+    "wait-on":              "^7.2.0"
   },
   "dependencies": {
-    "@automerge/automerge": "^3.2.6",
-    "electron": "^42.3.3",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "sql.js": "^1.14.1",
-    "uuid": "^14.0.0",
-    "ws": "^8.21.0"
+    "@automerge/automerge": "^2.2.8",
+    "electron":             "^29.0.0",
+    "react":                "^18.2.0",
+    "react-dom":            "^18.2.0",
+    "sql.js":               "latest",
+    "uuid":                 "^9.0.1",
+    "ws":                   "^8.16.0"
   }
 }
