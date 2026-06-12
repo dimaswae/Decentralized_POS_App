@@ -11,6 +11,7 @@ function registerHandlers(ipcMain, facade) {
   ipcMain.handle('auth:logout',      ()               => facade.logout());
   ipcMain.handle('auth:session',     ()               => facade.getSession());
   ipcMain.handle('auth:register',    (_, data)        => facade.registerUser(data));
+  ipcMain.handle('auth:getAllUsers', ()               => facade.getAllUsers());
 
   // Products
   ipcMain.handle('product:add',      (_, data)        => facade.addProduct(data));

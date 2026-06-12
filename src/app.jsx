@@ -85,6 +85,21 @@ function Login({ onLogin }) {
   const [pin,     setPin]     = useState('');
   const [err,     setErr]     = useState('');
   const [shake,   setShake]   = useState(false);
+  const [users,   setUsers]   = useState(MOCK_USERS);
+
+  useEffect(() => {
+    if (!api || !api.getAllUsers) return;
+    api.getAllUsers()
+      .then(realUsers => {
+        if (realUsers && realUsers.length) {
+          setUsers(realUsers.map(u => ({
+            ...u,
+            initials: u.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+          })));
+        }
+      })
+      .catch(err => console.error('[Login] getAllUsers failed:', err));
+  }, []);
 
   const press = (n) => {
     if (pin.length < 6) setPin(p => p + n);
@@ -114,7 +129,7 @@ function Login({ onLogin }) {
       </div>
 
       <div className="user-select">
-        {MOCK_USERS.map(u => (
+        {users.map(u => (
           <div key={u.id}
             className={`user-card ${selUser?.id === u.id ? 'selected' : ''}`}
             onClick={() => { setSelUser(u); setPin(''); setErr(''); }}>
@@ -149,7 +164,7 @@ function Login({ onLogin }) {
         </div>
 
         <div className="pin-hint">
-          Demo: Admin=0000 · Kasir B=1111 · Kasir S=2222
+          Demo: Admin=0000 · Kasir=1234
         </div>
       </div>
     </div>
@@ -201,7 +216,9 @@ function Header({ user, screen, setScreen, onLogout }) {
           {time.toLocaleTimeString('id-ID')}
         </div>
         <div className="user-badge">
-          <div className="user-badge-avatar">{user.initials}</div>
+          <div className="user-badge-avatar">
+            {(user.initials || user.name?.split(' ').map(w => w[0]).join('').slice(0, 2) || '??').toUpperCase()}
+          </div>
           <div>
             <div style={{ fontSize: 12, fontWeight: 500, color: '#e2e8f0', lineHeight: 1.2 }}>{user.name}</div>
             <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{user.role}</div>

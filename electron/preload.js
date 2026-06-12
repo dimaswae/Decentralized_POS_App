@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('posAPI', {
   logout:      ()            => ipcRenderer.invoke('auth:logout'),
   getSession:  ()            => ipcRenderer.invoke('auth:session'),
   register:    (data)        => ipcRenderer.invoke('auth:register', data),
+  getAllUsers: ()             => ipcRenderer.invoke('auth:getAllUsers'),
 
   // Products
   addProduct:    (data)     => ipcRenderer.invoke('product:add', data),

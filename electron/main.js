@@ -5,6 +5,7 @@
 'use strict';
 
 const path  = require('path');
+const fs    = require('fs');
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { PosFacade }        = require('./pos/pos-facade');
 const { registerHandlers } = require('./ipc/handlers');
@@ -24,12 +25,20 @@ async function createWindow() {
     title: 'POS CRDT — Local-First',
   });
 
-  const isDev = process.env.NODE_ENV === 'development';
+  const distIndex = path.join(__dirname, '../dist/index.html');
+  const isDev = !app.isPackaged && !fs.existsSync(distIndex);
+
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
+
+    // Retry jika Vite dev server belum siap saat window dibuat
+    mainWindow.webContents.on('did-fail-load', () => {
+      console.log('[Main] Vite dev server not ready, retrying in 1s...');
+      setTimeout(() => mainWindow.loadURL('http://localhost:5173'), 1000);
+    });
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(distIndex);
   }
 }
 
@@ -43,9 +52,7 @@ async function initFacade() {
   await facade.init({ dbPath, relayUrl, listenPort, enableSync: true });
 
   // Seed default admin jika belum ada
-  console.log("Daftar fungsi di facade:", Object.getOwnPropertyNames(Object.getPrototypeOf(facade)));
-
-  const users = await facade.getAllUsers();
+  const users = facade.getAllUsers();
   if (!users.length) {
     facade.registerUser({ name: 'Admin', role: 'admin',   pin: '0000' });
     facade.registerUser({ name: 'Kasir', role: 'cashier', pin: '1234' });
