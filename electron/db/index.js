@@ -99,7 +99,18 @@ class Database {
   async init(dbPath) {
     const initSqlJs = require('sql.js');
     this.SQL    = await initSqlJs();
-    this.dbPath = dbPath;
+    const os = require('os');
+    // Normalize common /tmp path (Unix-style) to the platform temp dir on Windows
+    let resolvedPath = dbPath;
+    if (resolvedPath.startsWith('/tmp')) {
+      resolvedPath = path.join(os.tmpdir(), path.basename(resolvedPath));
+    }
+    // Resolve to absolute path and ensure parent directory exists
+    this.dbPath = path.resolve(resolvedPath);
+    const parent = path.dirname(this.dbPath);
+    if (!fs.existsSync(parent)) {
+      fs.mkdirSync(parent, { recursive: true });
+    }
 
     // Load existing DB dari disk jika ada
     if (fs.existsSync(dbPath)) {
@@ -315,11 +326,19 @@ class Database {
     const ref = this._query(
       'SELECT created_at FROM operation_logs WHERE op_id = ?', [afterOpId]
     );
-    if (!ref.length) return [];
+    if (!ref.length) {
+      // If the referenced op_id is unknown on this node (e.g., peer provided
+      // an op id we don't have), fall back to returning the earliest ops so
+      // the peer can receive missing entries instead of getting nothing.
+      return this._query(
+        `SELECT * FROM operation_logs ORDER BY created_at ASC LIMIT ?`,
+        [limit]
+      ).map(this._parseOp);
+    }
 
     return this._query(
       `SELECT * FROM operation_logs
-       WHERE created_at > ?
+       WHERE created_at >= ?
        ORDER BY created_at ASC
        LIMIT ?`,
       [ref[0].created_at, limit]

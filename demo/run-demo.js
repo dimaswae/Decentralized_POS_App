@@ -184,7 +184,7 @@ async function runDemo() {
   // FASE 6: Verifikasi konvergensi
   header('FASE 6: Verifikasi Konvergensi State');
   const { MergeVerifier } = require('../electron/crdt/merge-verifier');
-  const result = MergeVerifier.compareNodes([
+  const result = MergeVerifier.compareNodes([ 
     { label: 'A', svc: A.svc },
     { label: 'B', svc: B.svc },
     { label: 'C', svc: C.svc },
