@@ -43,7 +43,9 @@ async function initFacade() {
   await facade.init({ dbPath, relayUrl, listenPort, enableSync: true });
 
   // Seed default admin jika belum ada
-  const users = facade.getAllUsers();
+  console.log("Daftar fungsi di facade:", Object.getOwnPropertyNames(Object.getPrototypeOf(facade)));
+
+  const users = await facade.getAllUsers();
   if (!users.length) {
     facade.registerUser({ name: 'Admin', role: 'admin',   pin: '0000' });
     facade.registerUser({ name: 'Kasir', role: 'cashier', pin: '1234' });

@@ -89,7 +89,8 @@ class PosFacade {
   login(userId, pin)                     { return this.auth.login(userId, pin); }
   loginByName(name, pin)                 { return this.auth.loginByName(name, pin); }
   logout()                               { return this.auth.logout(); }
-  getSession()                           { return this.auth.getSession(); }
+  getUser(id)                            { return this.posService.getUser(id); }
+  getAllUsers()                          { return this.posService.getAllUsers(); }
 
   // ─── Products ─────────────────────────────────────────────────────
   addProduct(data)                       { return this.posService.addProduct(data); }
