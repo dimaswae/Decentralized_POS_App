@@ -36,7 +36,7 @@ contextBridge.exposeInMainWorld('posAPI', {
   cartGet:      ()          => ipcRenderer.invoke('cart:get'),
   cartSetNote:  (note)      => ipcRenderer.invoke('cart:setNote', note),
   checkout:     (info)      => ipcRenderer.invoke('cart:checkout', info),
-
+  
   // Reports
   getDailySummary:       (ts)  => ipcRenderer.invoke('reports:daily', ts),
   getInventoryReport:    (thr) => ipcRenderer.invoke('reports:inventory', thr),
