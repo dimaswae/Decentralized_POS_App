@@ -115,6 +115,15 @@ class ReportsService {
       transactions: txs.map(tx => ({
         ...tx,
         item_count: tx.items?.length || 0,
+        items: (tx.items || []).map(item => {
+          const prod = this.posService.getProduct(item.product_id);
+          return {
+            ...item,
+            name:  prod?.name || item.name || item.product_id,
+            price: item.price_at_sale ?? item.price,
+          };
+        }),
+        cashier: this.posService.getUser(tx.cashier_id)?.name || tx.cashier_id,
       })),
     };
   }

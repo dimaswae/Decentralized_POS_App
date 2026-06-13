@@ -47,4 +47,8 @@ contextBridge.exposeInMainWorld('posAPI', {
   // System
   getSystemStatus: () => ipcRenderer.invoke('system:status'),
   getSyncInfo:     () => ipcRenderer.invoke('system:syncInfo'),
+  // Push events from main (subscribe)
+  onCheckout: (cb) => ipcRenderer.on('pos:checkout', (_, data) => cb && cb(data)),
+  onSyncUpdate: (cb) => ipcRenderer.on('pos:sync', (_, data) => cb && cb(data)),
+  onProductsUpdated: (cb) => ipcRenderer.on('pos:products-updated', (_, data) => cb && cb(data)),
 });

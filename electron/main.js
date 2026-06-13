@@ -9,6 +9,7 @@ const fs    = require('fs');
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { PosFacade }        = require('./pos/pos-facade');
 const { registerHandlers } = require('./ipc/handlers');
+const { seedCatalog }      = require('./seed-catalog');
 
 let mainWindow;
 let facade;
@@ -58,6 +59,8 @@ async function initFacade() {
     facade.registerUser({ name: 'Kasir', role: 'cashier', pin: '1234' });
     console.log('[Main] Default users seeded: Admin/0000, Kasir/1234');
   }
+
+  seedCatalog(facade);
 }
 
 app.whenReady().then(async () => {

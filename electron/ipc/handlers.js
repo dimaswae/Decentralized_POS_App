@@ -4,6 +4,17 @@
  */
 'use strict';
 
+function _broadcast(channel, payload) {
+  try {
+    const { BrowserWindow } = require('electron');
+    for (const w of BrowserWindow.getAllWindows()) {
+      try { w.webContents.send(channel, payload); } catch (_) { /* ignore */ }
+    }
+  } catch (e) {
+    console.error(`[IPC] Failed to broadcast ${channel}:`, e.message);
+  }
+}
+
 function registerHandlers(ipcMain, facade) {
   // Auth
   ipcMain.handle('auth:login',       (_, userId, pin) => facade.login(userId, pin));
@@ -34,7 +45,14 @@ function registerHandlers(ipcMain, facade) {
   ipcMain.handle('cart:clear',       ()               => facade.cartClear());
   ipcMain.handle('cart:get',         ()               => facade.getCart());
   ipcMain.handle('cart:setNote',     (_, note)        => facade.cartSetNote(note));
-  ipcMain.handle('cart:checkout',    (_, info)        => facade.checkout(info));
+  ipcMain.handle('cart:checkout', async (_, info) => {
+    const res = await facade.checkout(info);
+    if (res?.ok) {
+      _broadcast('pos:checkout', res);
+      _broadcast('pos:products-updated', null);
+    }
+    return res;
+  });
 
   // Reports
   ipcMain.handle('reports:daily',       (_, ts)  => facade.getDailySummary(ts));
@@ -45,7 +63,7 @@ function registerHandlers(ipcMain, facade) {
 
   // System
   ipcMain.handle('system:status',   () => facade.getSystemStatus());
-  ipcMain.handle('system:syncInfo', () => facade.getSyncEngineStatus());
+  ipcMain.handle('system:syncInfo', () => facade.getSyncInfo());
 
   console.log('[IPC] All handlers registered');
 }

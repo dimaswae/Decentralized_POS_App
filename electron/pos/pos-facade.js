@@ -21,6 +21,7 @@ const { RecoveryManager } = require('../recovery/recovery-manager');
 const { SyncEngine }      = require('../sync/sync-engine');
 const { Database }        = require('../db/index');
 const { initNodeIdentity } = require('../identity');
+const { MergeVerifier }    = require('../crdt/merge-verifier');
 
 class PosFacade {
   constructor() {
@@ -89,8 +90,9 @@ class PosFacade {
   login(userId, pin)                     { return this.auth.login(userId, pin); }
   loginByName(name, pin)                 { return this.auth.loginByName(name, pin); }
   logout()                               { return this.auth.logout(); }
+  getSession()                           { return this.auth.getSession(); }
   getUser(id)                            { return this.posService.getUser(id); }
-  getAllUsers()                          { return this.posService.getAllUsers(); }
+  getAllUsers()                          { return this.auth.getPublicUsers(); }
 
   // ─── Products ─────────────────────────────────────────────────────
   addProduct(data)                       { return this.posService.addProduct(data); }
@@ -131,6 +133,58 @@ class PosFacade {
   // ─── System ───────────────────────────────────────────────────────
   getSystemStatus()                      { return this.posService.getSystemStatus(); }
   getSyncEngineStatus()                  { return this.syncEngine?.getStatus() || null; }
+
+  /** UI-friendly sync + convergence snapshot. */
+  getSyncInfo() {
+    const status  = this.getSystemStatus();
+    const engine  = this.syncEngine?.getStatus();
+    const hash    = MergeVerifier.computeStateHash(this.posService);
+    const listenPort = this.syncEngine?.listenPort || 0;
+
+    const nodes = [{
+      id:     status.node_id,
+      label:  'Node Lokal',
+      port:   listenPort,
+      status: engine?.relay_ready ? 'online' : 'offline',
+      tx:     status.docs?.transactions ?? 0,
+      hash:   hash.combinedHash,
+    }];
+
+    if (engine?.connections) {
+      for (const [peerId, conn] of Object.entries(engine.connections)) {
+        const port = conn.ws_url
+          ? parseInt(String(conn.ws_url).split(':').pop(), 10) || 0
+          : 0;
+        const online = conn.state === 'SYNCED' || conn.state === 'IDLE' ||
+                       conn.state === 'SYNCING' || conn.state === 'HANDSHAKING';
+        nodes.push({
+          id:     peerId,
+          label:  `Peer ${peerId.slice(0, 8)}`,
+          port,
+          status: online ? 'online' : 'offline',
+          tx:     '—',
+          hash:   '—',
+        });
+      }
+    }
+
+    const allOnline = nodes.every(n => n.status === 'online');
+    const allSame   = nodes.length > 0 &&
+      nodes.every(n => n.hash === hash.combinedHash && n.hash !== '—');
+
+    return {
+      phase:        engine?.relay_ready ? (allSame ? 'synced' : 'syncing') : 'offline',
+      nodes,
+      logs:         [],
+      localHash:    hash.combinedHash,
+      relayReady:   engine?.relay_ready ?? false,
+      knownPeers:   engine?.known_peers ?? 0,
+      pendingOps:   this.db.getPendingOps().length,
+      totalOps:     this.db.getTotalOpCount(),
+      nodeId:       status.node_id,
+      allConverged: allSame && allOnline,
+    };
+  }
 
   isReady()                              { return this._ready; }
 

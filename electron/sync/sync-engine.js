@@ -28,6 +28,23 @@ const {
 
 const DOC_IDS = ['products', 'transactions', 'users'];
 
+function _broadcastSync(engine) {
+  try {
+    const { BrowserWindow } = require('electron');
+    const payload = {
+      peerNodeId: null,
+      node_id:    engine.nodeId,
+      timestamp:  Date.now(),
+    };
+    for (const w of BrowserWindow.getAllWindows()) {
+      try {
+        w.webContents.send('pos:sync', payload);
+        w.webContents.send('pos:products-updated', null);
+      } catch (_) { /* ignore */ }
+    }
+  } catch (_) { /* not in Electron context (tests) */ }
+}
+
 // State machine states
 const PEER_STATE = {
   DISCONNECTED: 'DISCONNECTED',
@@ -520,6 +537,7 @@ class SyncEngine {
     if (this.onSyncComplete) {
       this.onSyncComplete(peerNodeId);
     }
+    _broadcastSync(this);
   }
 
   // ──────────────────────────────────────────────────────────────────

@@ -83,6 +83,11 @@ class AuthService {
 
   getSession()    { return this._session; }
   isLoggedIn()    { return this._session !== null; }
+
+  /** Users safe for renderer (no pin_hash). */
+  getPublicUsers() {
+    return this.posService.getAllUsers().map(({ id, name, role }) => ({ id, name, role }));
+  }
   isAdmin()       { return this._session?.role === 'admin'; }
   getCurrentUser(){ return this._session ? { ...this._session } : null; }
 

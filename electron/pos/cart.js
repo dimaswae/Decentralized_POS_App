@@ -47,11 +47,15 @@ class CartManager {
       const existing = this._items.get(productId);
       existing.qty      += qty;
       existing.subtotal  = existing.qty * product.price;
+      existing.icon      = product.icon || existing.icon || '📦';
+      existing.unit      = product.unit || existing.unit || 'pcs';
     } else {
       this._items.set(productId, {
         product_id:     productId,
         name:           product.name,
         price_at_sale:  product.price,
+        icon:           product.icon || '📦',
+        unit:           product.unit || 'pcs',
         qty,
         subtotal:       qty * product.price,
       });
@@ -73,6 +77,8 @@ class CartManager {
       product_id:    productId,
       name:          product.name,
       price_at_sale: product.price,
+      icon:          product.icon || '📦',
+      unit:          product.unit || 'pcs',
       qty,
       subtotal:      qty * product.price,
     });

@@ -68,8 +68,10 @@ class PosService {
       id:         uuidv4(),
       name:       data.name,
       price:      data.price,
-      category:   data.category || 'umum',
+      category:   (data.category || 'umum').toLowerCase(),
       unit:       data.unit     || 'pcs',
+      icon:       data.icon     || '📦',
+      low:        data.low      ?? 10,
     };
 
     this.docManager.upsertProduct(product);
@@ -101,6 +103,8 @@ class PosService {
     return products.map(p => ({
       ...p,
       stock: stocks[p.id] || 0,
+      icon:  p.icon || '📦',
+      low:   p.low ?? 10,
     }));
   }
 

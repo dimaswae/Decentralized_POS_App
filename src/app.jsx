@@ -1,64 +1,43 @@
 /**
- * src/App.jsx
+ * src/app.jsx
  * POS CRDT — Professional React UI
  *
  * Berkomunikasi dengan Electron main process via window.posAPI (preload.js).
- * Fallback ke mock data saat berjalan di browser tanpa Electron.
  *
  * Screens:
- *   login     → PIN authentication per user
- *   pos       → Product grid + Cart + Checkout flow
- *   inventory → Stock management dengan status indicator
- *   reports   → Daily summary + charts + transaction history
- *   sync      → Node status + CRDT hash verification + live log
+ * login     → PIN authentication per user
+ * pos       → Product grid + Cart + Checkout flow
+ * inventory → Stock management dengan status indicator
+ * reports   → Daily summary + charts + transaction history
+ * sync      → Node status + CRDT hash verification + live log
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 /* ─── API bridge ─────────────────────────────────────────────── */
 const api = window.posAPI || null;
 const fmtRp = n => 'Rp ' + Number(n).toLocaleString('id-ID');
 const CATS  = ['Semua', 'Pokok', 'Minuman', 'Makanan', 'Toiletri'];
 
-/* ─── Mock data (fallback tanpa Electron) ─────────────────────── */
-const MOCK_PRODUCTS = [
-  { id:'p1',  name:'Beras Premium',  price:15000, category:'Pokok',    stock:490, unit:'kg',     icon:'🌾', low:50  },
-  { id:'p2',  name:'Gula Pasir',     price:14000, category:'Pokok',    stock:295, unit:'kg',     icon:'🍚', low:30  },
-  { id:'p3',  name:'Minyak Goreng',  price:20000, category:'Pokok',    stock:195, unit:'L',      icon:'🫙', low:20  },
-  { id:'p4',  name:'Kopi Tubruk',    price:5000,  category:'Minuman',  stock:147, unit:'sachet', icon:'☕', low:20  },
-  { id:'p5',  name:'Teh Celup',      price:8000,  category:'Minuman',  stock:99,  unit:'kotak',  icon:'🍵', low:15  },
-  { id:'p6',  name:'Air Mineral',    price:3000,  category:'Minuman',  stock:300, unit:'botol',  icon:'💧', low:50  },
-  { id:'p7',  name:'Indomie Goreng', price:3500,  category:'Makanan',  stock:200, unit:'pcs',    icon:'🍜', low:30  },
-  { id:'p8',  name:'Roti Tawar',     price:18000, category:'Makanan',  stock:15,  unit:'bungkus',icon:'🍞', low:10  },
-  { id:'p9',  name:'Telur Ayam',     price:2500,  category:'Pokok',    stock:150, unit:'butir',  icon:'🥚', low:30  },
-  { id:'p10', name:'Susu UHT',       price:12000, category:'Minuman',  stock:60,  unit:'kotak',  icon:'🥛', low:20  },
-  { id:'p11', name:'Sabun Mandi',    price:7500,  category:'Toiletri', stock:85,  unit:'bar',    icon:'🧼', low:15  },
-  { id:'p12', name:'Shampo',         price:25000, category:'Toiletri', stock:40,  unit:'botol',  icon:'🧴', low:10  },
-  { id:'p13', name:'Pasta Gigi',     price:15000, category:'Toiletri', stock:55,  unit:'tube',   icon:'🪥', low:10  },
-  { id:'p14', name:'Tepung Terigu',  price:9000,  category:'Pokok',    stock:120, unit:'kg',     icon:'🌾', low:20  },
-  { id:'p15', name:'Mie Instan',     price:3200,  category:'Makanan',  stock:0,   unit:'pcs',    icon:'🍝', low:30  },
-];
+const parseProducts = (list) =>
+  Array.isArray(list) ? list : (list?.products ? list.products : []);
 
-const MOCK_USERS = [
-  { id:'u1', name:'Admin Toko',  role:'admin',   pin:'0000', initials:'AD' },
-  { id:'u2', name:'Kasir Budi',  role:'cashier', pin:'1111', initials:'KB' },
-  { id:'u3', name:'Kasir Siti',  role:'cashier', pin:'2222', initials:'KS' },
-];
+const catMatch = (product, cat) =>
+  cat === 'Semua' || (product.category || '').toLowerCase() === cat.toLowerCase();
 
-const SYNC_NODES = [
-  { id:'A', label:'Node A', port:18200, status:'online', tx:7, hash:'dcefd63c' },
-  { id:'B', label:'Node B', port:18201, status:'online', tx:7, hash:'dcefd63c' },
-  { id:'C', label:'Node C', port:18202, status:'online', tx:7, hash:'dcefd63c' },
-];
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
 
-const MOCK_TRANSACTIONS = [
-  { id:'TX-007', items:'Beras 3kg + Gula 2kg',    total:73000,  cashier:'Kasir Budi',  node:'A', time:'14:32' },
-  { id:'TX-006', items:'Minyak 1L + Kopi 5pcs',   total:45000,  cashier:'Kasir Siti',  node:'B', time:'13:58' },
-  { id:'TX-005', items:'Air Mineral 3btl',         total:9000,   cashier:'Kasir Budi',  node:'A', time:'13:21' },
-  { id:'TX-004', items:'Teh 2kotak + Sabun 1bar',  total:23500,  cashier:'Kasir Siti',  node:'C', time:'12:44' },
-  { id:'TX-003', items:'Indomie 5pcs',             total:17500,  cashier:'Kasir Budi',  node:'A', time:'11:55' },
-  { id:'TX-002', items:'Beras 2kg + Minyak 2L',    total:70000,  cashier:'Kasir Siti',  node:'B', time:'11:12' },
-  { id:'TX-001', items:'Gula 3kg',                 total:42000,  cashier:'Kasir Budi',  node:'C', time:'10:33' },
-];
+const mapCartItem = (item) => ({
+  id:    item.product_id,
+  name:  item.name,
+  price: item.price_at_sale,
+  qty:   item.qty,
+  icon:  item.icon || '📦',
+  unit:  item.unit || 'pcs',
+});
 
 /* ─── Toast ─────────────────────────────────────────────────────── */
 function Toast({ toast }) {
@@ -85,10 +64,14 @@ function Login({ onLogin }) {
   const [pin,     setPin]     = useState('');
   const [err,     setErr]     = useState('');
   const [shake,   setShake]   = useState(false);
-  const [users,   setUsers]   = useState(MOCK_USERS);
+  const [users,   setUsers]   = useState([]);
 
   useEffect(() => {
-    if (!api || !api.getAllUsers) return;
+    if (!api || !api.getAllUsers) {
+      console.warn('[Login] posAPI.getAllUsers unavailable — no users loaded');
+      setUsers([]);
+      return;
+    }
     api.getAllUsers()
       .then(realUsers => {
         if (realUsers && realUsers.length) {
@@ -108,14 +91,10 @@ function Login({ onLogin }) {
 
   const submit = async () => {
     if (!selUser) { setErr('Pilih kasir terlebih dahulu'); return; }
-    if (api) {
-      const res = await api.login(selUser.id, pin);
-      if (res.ok) onLogin(res.user);
-      else { setErr(res.error || 'PIN salah'); setPin(''); doShake(); }
-    } else {
-      if (selUser.pin === pin) onLogin(selUser);
-      else { setErr('PIN salah'); setPin(''); doShake(); }
-    }
+    if (!api) { setErr('Backend tidak tersedia'); return; }
+    const res = await api.login(selUser.id, pin);
+    if (res.ok) onLogin(res.user);
+    else { setErr(res.error || 'PIN salah'); setPin(''); doShake(); }
   };
 
   const doShake = () => { setShake(true); setTimeout(() => setShake(false), 500); };
@@ -172,12 +151,17 @@ function Login({ onLogin }) {
 }
 
 /* ─── Header ────────────────────────────────────────────────────── */
-function Header({ user, screen, setScreen, onLogout }) {
+function Header({ user, screen, setScreen, onLogout, syncInfo }) {
   const [time, setTime] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  const peerCount = syncInfo?.knownPeers ?? 0;
+  const syncLabel = syncInfo?.relayReady
+    ? `● ${peerCount + 1} node · ${syncInfo?.allConverged ? 'synced' : 'syncing'}`
+    : '● offline';
 
   const NAVS = [
     { k: 'pos',       label: 'Kasir' },
@@ -208,7 +192,7 @@ function Header({ user, screen, setScreen, onLogout }) {
       </div>
 
       <div className="header-right">
-        <div className="sync-badge">● 3 node synced</div>
+        <div className="sync-badge">{syncLabel}</div>
         <div style={{
           fontSize: 11, color: '#475569',
           fontFamily: "'JetBrains Mono', monospace"
@@ -231,15 +215,21 @@ function Header({ user, screen, setScreen, onLogout }) {
 }
 
 /* ─── Status bar ───────────────────────────────────────────────── */
-function StatusBar() {
+function StatusBar({ systemStatus, syncInfo }) {
+  const nodeShort = (systemStatus?.node_id || syncInfo?.nodeId || '—').slice(0, 8);
+  const hash      = syncInfo?.localHash || '—';
+  const peers     = syncInfo?.knownPeers ?? 0;
+  const ops       = syncInfo?.totalOps ?? 0;
+  const online    = syncInfo?.relayReady;
+
   return (
     <div className="status-bar">
       <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
         {[
-          { c: '#10b981', t: '3 node online' },
-          { c: '#818cf8', t: 'hash: dcefd63c' },
+          { c: online ? '#10b981' : '#ef4444', t: online ? `${peers + 1} node online` : 'relay offline' },
+          { c: '#818cf8', t: `hash: ${hash}` },
           { c: '#64748b', t: 'WAL enabled' },
-          { c: '#64748b', t: '300 ops synced' },
+          { c: '#64748b', t: `${ops} ops logged` },
         ].map(({ c, t }) => (
           <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div style={{ width: 5, height: 5, borderRadius: 2.5, background: c }} />
@@ -248,15 +238,15 @@ function StatusBar() {
         ))}
       </div>
       <span style={{ fontSize: 10, color: '#1e293b', fontFamily: "'JetBrains Mono', monospace" }}>
-        node:12ad3ef5 · relay:localhost:9000
+        node:{nodeShort} · relay:localhost:9000
       </span>
     </div>
   );
 }
 
 /* ─── POS Screen ───────────────────────────────────────────────── */
-function POSScreen() {
-  const [products, setProducts] = useState(MOCK_PRODUCTS);
+function POSScreen({ user }) {
+  const [products, setProducts] = useState([]);
   const [cart,     setCart]     = useState([]);
   const [search,   setSearch]   = useState('');
   const [cat,      setCat]      = useState('Semua');
@@ -266,37 +256,71 @@ function POSScreen() {
   const [toast,    showToast]   = useToast();
 
   const filtered = products.filter(p =>
-    (cat === 'Semua' || p.category === cat) &&
+    catMatch(p, cat) &&
     p.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const addToCart = (p) => {
+  const fetchProducts = useCallback(async () => {
+    if (!api?.getAllProducts) return;
+    try {
+      const list = await api.getAllProducts();
+      setProducts(parseProducts(list));
+    } catch (err) {
+      console.error('[POS] getAllProducts failed:', err);
+      setProducts([]);
+    }
+  }, []);
+
+  const fetchCart = useCallback(async () => {
+    if (!api?.cartGet) return;
+    try {
+      const summary = await api.cartGet();
+      setCart((summary?.items || []).map(mapCartItem));
+    } catch (err) {
+      console.error('[POS] cartGet failed:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!api) {
+      console.warn('[POS] posAPI not available — no products loaded');
+      return;
+    }
+    fetchProducts();
+    fetchCart();
+    const onUpd = () => { fetchProducts(); fetchCart(); };
+    window.addEventListener('pos:products-updated', onUpd);
+    const poll = setInterval(fetchProducts, 15000);
+    return () => {
+      window.removeEventListener('pos:products-updated', onUpd);
+      clearInterval(poll);
+    };
+  }, [fetchProducts, fetchCart]);
+
+  const addToCart = async (p) => {
     if (p.stock <= 0) { showToast('Stok habis!', 'err'); return; }
-    setCart(c => {
-      const ex = c.find(x => x.id === p.id);
-      if (ex) return c.map(x => x.id === p.id ? { ...x, qty: x.qty + 1 } : x);
-      return [...c, { ...p, qty: 1 }];
-    });
-    setProducts(pr => pr.map(x => x.id === p.id ? { ...x, stock: x.stock - 1 } : x));
+    if (!api?.cartAdd) { showToast('Backend tidak tersedia', 'err'); return; }
+    const res = await api.cartAdd(p.id, 1);
+    if (!res?.ok) { showToast(res?.error || 'Gagal menambah ke keranjang', 'err'); return; }
+    await Promise.all([fetchProducts(), fetchCart()]);
   };
 
-  const changeQty = (id, d) => {
-    setCart(c => {
-      const item = c.find(x => x.id === id);
-      if (item.qty + d <= 0) {
-        setProducts(pr => pr.map(x => x.id === id ? { ...x, stock: x.stock + item.qty } : x));
-        return c.filter(x => x.id !== id);
-      }
-      setProducts(pr => pr.map(x => x.id === id ? { ...x, stock: x.stock + (d > 0 ? -1 : 1) } : x));
-      return c.map(x => x.id === id ? { ...x, qty: x.qty + d } : x);
-    });
+  const changeQty = async (id, d) => {
+    if (!api) return;
+    const item = cart.find(x => x.id === id);
+    if (!item) return;
+    const newQty = item.qty + d;
+    const res = newQty <= 0
+      ? await api.cartRemove(id)
+      : await api.cartSetQty(id, newQty);
+    if (!res?.ok) { showToast(res?.error || 'Gagal mengubah qty', 'err'); return; }
+    await Promise.all([fetchProducts(), fetchCart()]);
   };
 
-  const clearCart = () => {
-    cart.forEach(i => setProducts(pr =>
-      pr.map(p => p.id === i.id ? { ...p, stock: p.stock + i.qty } : p)
-    ));
+  const clearCart = async () => {
+    if (api?.cartClear) await api.cartClear();
     setCart([]);
+    await fetchProducts();
   };
 
   const total  = cart.reduce((s, i) => s + i.price * i.qty, 0);
@@ -304,17 +328,46 @@ function POSScreen() {
 
   const checkout = async () => {
     if (parseInt(payment) < total) { showToast('Pembayaran kurang!', 'err'); return; }
-    setSuccess(true);
-    if (api) {
-      await api.checkout({ payment: parseInt(payment) });
-    }
-    setTimeout(() => {
-      clearCart();
+    if (!api?.checkout) { showToast('Backend tidak tersedia', 'err'); return; }
+
+    const tempId = `pending-${Date.now()}`;
+    const tempTx = {
+      id: tempId,
+      items: cart.map(i => ({ product_id: i.id, name: i.name, qty: i.qty, price: i.price })),
+      total,
+      cashier: user?.name || user?.id || 'unknown',
+      node: 'local',
+      time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      pending: true,
+    };
+    window.dispatchEvent(new CustomEvent('pos:optimisticTx', { detail: tempTx }));
+
+    try {
+      const res = await api.checkout({ payment: parseInt(payment) });
+      if (res?.ok) {
+        window.dispatchEvent(new CustomEvent('pos:optimisticRollback', { detail: { id: tempId } }));
+        window.dispatchEvent(new Event('pos:products-updated'));
+        setSuccess(true);
+        setTimeout(() => {
+          setCart([]);
+          setModal(false);
+          setPayment('');
+          setSuccess(false);
+          showToast(`Berhasil! Kembali ${fmtRp(Math.max(0, change))}`);
+        }, 900);
+      } else {
+        window.dispatchEvent(new CustomEvent('pos:optimisticRollback', { detail: { id: tempId } }));
+        showToast(res?.error || 'Checkout gagal', 'err');
+        setModal(false);
+        setPayment('');
+      }
+    } catch (err) {
+      console.error('[POS] checkout failed:', err);
+      window.dispatchEvent(new CustomEvent('pos:optimisticRollback', { detail: { id: tempId } }));
+      showToast('Checkout gagal', 'err');
       setModal(false);
       setPayment('');
-      setSuccess(false);
-      showToast(`Berhasil! Kembali ${fmtRp(Math.max(0, change))}`);
-    }, 1400);
+    }
   };
 
   return (
@@ -343,14 +396,14 @@ function POSScreen() {
         <div className="product-grid">
           {filtered.map(p => (
             <div key={p.id}
-              className={`product-card ${p.stock <= 0 ? 'out' : p.stock <= p.low ? 'low' : ''}`}
+              className={`product-card ${p.stock <= 0 ? 'out' : p.stock <= (p.low ?? 10) ? 'low' : ''}`}
               onClick={() => addToCart(p)}>
               <div className="product-icon">{p.icon}</div>
               <div className="product-name">{p.name}</div>
               <div className="product-price">{fmtRp(p.price)}</div>
               <div className="product-footer">
                 <span className="product-unit">{p.unit}</span>
-                <span className={`stock-badge ${p.stock <= 0 ? 'out' : p.stock <= p.low ? 'low' : 'ok'}`}>
+                <span className={`stock-badge ${p.stock <= 0 ? 'out' : p.stock <= (p.low ?? 10) ? 'low' : 'ok'}`}>
                   {p.stock <= 0 ? '—' : p.stock}
                 </span>
               </div>
@@ -484,9 +537,27 @@ function POSScreen() {
 
 /* ─── Inventory Screen ─────────────────────────────────────────── */
 function InventoryScreen() {
-  const [products] = useState(MOCK_PRODUCTS);
+  const [products, setProducts] = useState([]);
+  const [detailedView, setDetailedView] = useState(true);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('name');
+
+  useEffect(() => {
+    if (!api || !api.getAllProducts) {
+      console.warn('[Inventory] posAPI.getAllProducts unavailable — no products loaded');
+      setProducts([]);
+      setDetailedView(false);
+      return;
+    }
+    const fetchProducts = () => api.getAllProducts()
+      .then(list => setProducts(parseProducts(list)))
+      .catch(err => { console.error('[Inventory] getAllProducts failed:', err); setProducts([]); });
+    fetchProducts();
+    const onUpd = () => fetchProducts();
+    window.addEventListener('pos:products-updated', onUpd);
+    const poll = setInterval(fetchProducts, 15000);
+    return () => { window.removeEventListener('pos:products-updated', onUpd); clearInterval(poll); };
+  }, []);
 
   const filtered = products
     .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
@@ -496,11 +567,13 @@ function InventoryScreen() {
       return a.name.localeCompare(b.name);
     });
 
+  const lowThreshold = (p) => p.low ?? 10;
+
   const stats = {
-    total:    products.length,
-    low:      products.filter(p => p.stock <= p.low && p.stock > 0).length,
-    out:      products.filter(p => p.stock <= 0).length,
-    ok:       products.filter(p => p.stock > p.low).length,
+    total: products.length,
+    low:   products.filter(p => p.stock <= lowThreshold(p) && p.stock > 0).length,
+    out:   products.filter(p => p.stock <= 0).length,
+    ok:    products.filter(p => p.stock > lowThreshold(p)).length,
   };
 
   return (
@@ -536,13 +609,40 @@ function InventoryScreen() {
             </button>
           ))}
         </div>
-        <div style={{ marginLeft: 'auto', fontSize: 12, color: '#475569' }}>
-          Sumber: immutable operation log · proyeksi real-time
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button className="cat-tab" onClick={() => setDetailedView(d => !d)}>
+            {detailedView ? 'Condensed' : 'Detailed'}
+          </button>
+          <div style={{ fontSize: 12, color: '#475569' }}>
+            Sumber: immutable operation log · proyeksi real-time
+          </div>
         </div>
       </div>
 
       {/* Table */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {products.length === 0 ? (
+            <div style={{ padding: 16 }}>
+              <div style={{ color: '#94a3b8', marginBottom: 8 }}>
+                Belum ada produk — jalankan aplikasi via Electron atau tambahkan katalog.
+              </div>
+            </div>
+        ) : !detailedView ? (
+          filtered.map((p, i) => (
+            <div key={p.id} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '10px 14px', borderRadius: 8,
+              background: i % 2 === 0 ? '#0a0f1a' : 'transparent',
+              border: '1px solid #1e293b',
+            }}>
+              <span>{p.icon || '📦'} {p.name}</span>
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", color: '#818cf8' }}>
+                {p.stock} {p.unit} · {fmtRp(p.price)}
+              </span>
+            </div>
+          ))
+        ) : (
+        <>
         <div style={{
           display: 'grid', gridTemplateColumns: '32px 1fr 90px 120px 160px 80px',
           padding: '6px 14px', gap: 12,
@@ -557,9 +657,10 @@ function InventoryScreen() {
         </div>
 
         {filtered.map((p, i) => {
-          const pct   = Math.min(100, (p.stock / (p.low * 6)) * 100);
-          const color = p.stock <= 0 ? '#ef4444' : p.stock <= p.low ? '#f59e0b' : '#10b981';
-          const status = p.stock <= 0 ? 'Habis' : p.stock <= p.low ? 'Rendah' : 'Normal';
+          const low = lowThreshold(p);
+          const pct   = Math.min(100, (p.stock / (low * 6)) * 100);
+          const color = p.stock <= 0 ? '#ef4444' : p.stock <= low ? '#f59e0b' : '#10b981';
+          const status = p.stock <= 0 ? 'Habis' : p.stock <= low ? 'Rendah' : 'Normal';
           return (
             <div key={p.id} style={{
               display: 'grid', gridTemplateColumns: '32px 1fr 90px 120px 160px 80px',
@@ -584,7 +685,7 @@ function InventoryScreen() {
               </div>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                  <span style={{ fontSize: 10, color: '#475569' }}>min: {p.low}</span>
+                  <span style={{ fontSize: 10, color: '#475569' }}>min: {low}</span>
                   <span style={{ fontSize: 10, color }}>
                     {Math.round(Math.min(100, pct))}%
                   </span>
@@ -596,13 +697,15 @@ function InventoryScreen() {
               <div style={{ textAlign: 'center' }}>
                 <span style={{
                   fontSize: 10, padding: '3px 9px', borderRadius: 5, fontWeight: 500,
-                  background: p.stock <= 0 ? 'rgba(239,68,68,.12)' : p.stock <= p.low ? 'rgba(245,158,11,.12)' : 'rgba(16,185,129,.12)',
+                  background: p.stock <= 0 ? 'rgba(239,68,68,.12)' : p.stock <= low ? 'rgba(245,158,11,.12)' : 'rgba(16,185,129,.12)',
                   color,
                 }}>{status}</span>
               </div>
             </div>
           );
         })}
+        </>
+       )}
       </div>
     </div>
   );
@@ -610,21 +713,84 @@ function InventoryScreen() {
 
 /* ─── Reports Screen ───────────────────────────────────────────── */
 function ReportsScreen() {
+  const [txs, setTxs] = useState([]);
+
+  useEffect(() => {
+    if (!api || !api.getTransactionHistory) {
+      console.warn('[Reports] posAPI.getTransactionHistory unavailable — no transactions will be shown');
+      setTxs([]);
+      return;
+    }
+    const fetchTxs = () => {
+      api.getTransactionHistory({ limit: 50, fromTs: startOfToday() })
+        .then(res => {
+          const list = res?.transactions ? res.transactions : (Array.isArray(res) ? res : []);
+          setTxs(list || []);
+        })
+        .catch(err => {
+          console.error('[Reports] getTransactionHistory failed:', err);
+          setTxs([]);
+        });
+    };
+    fetchTxs();
+    const onCheckout = () => fetchTxs();
+    window.addEventListener('pos:checkout', onCheckout);
+
+    // optimistic tx push from renderer (immediate UI) and rollback support
+    const onOptimistic = (e) => {
+      const t = e.detail;
+      if (!t) return;
+      setTxs(prev => [t, ...prev]);
+    };
+    const onRollback = (e) => {
+      const { id } = e.detail || {};
+      if (!id) return;
+      setTxs(prev => prev.filter(x => x.id !== id));
+    };
+    window.addEventListener('pos:optimisticTx', onOptimistic);
+    window.addEventListener('pos:optimisticRollback', onRollback);
+
+    // polling
+    const poll = setInterval(fetchTxs, 15000);
+
+    return () => {
+      window.removeEventListener('pos:checkout', onCheckout);
+      window.removeEventListener('pos:optimisticTx', onOptimistic);
+      window.removeEventListener('pos:optimisticRollback', onRollback);
+      clearInterval(poll);
+    };
+  }, []);
+
+  const totalRevenue = txs.reduce((s, tx) => s + (tx.total || 0), 0);
+  const itemsSoldQty = txs.flatMap(tx => tx.items || [])
+    .reduce((sum, it) => sum + (Number(it.qty) || 0), 0);
+
   const dailyMetrics = [
-    { label: 'Total Transaksi',  value: '7 tx',          sub: 'Hari ini',        accent: '#818cf8' },
-    { label: 'Total Pendapatan', value: 'Rp 280.000',    sub: '+18% kemarin',    accent: '#10b981' },
-    { label: 'Items Terjual',    value: '34 pcs',         sub: 'Rata-rata 5/tx',  accent: '#f59e0b' },
-    { label: 'Avg Nilai Tx',     value: 'Rp 40.000',     sub: 'Per transaksi',   accent: '#38bdf8' },
+    { label: 'Total Transaksi',  value: `${txs.length} tx`, sub: 'Hari ini',        accent: '#818cf8' },
+    { label: 'Total Pendapatan', value: `Rp ${Number(totalRevenue).toLocaleString('id-ID')}`, sub: '',    accent: '#10b981' },
+    { label: 'Items Terjual',    value: `${itemsSoldQty} pcs`, sub: 'Total qty',  accent: '#f59e0b' },
+    { label: 'Avg Nilai Tx',     value: txs.length ? `Rp ${Math.round(totalRevenue / txs.length).toLocaleString('id-ID')}` : 'Rp 0', sub: 'Per transaksi',   accent: '#38bdf8' },
   ];
 
-  const topProds = [
-    { name: 'Beras',  rev: 150000, qty: 10 },
-    { name: 'Minyak', rev: 100000, qty: 5  },
-    { name: 'Gula',   rev: 84000,  qty: 6  },
-    { name: 'Kopi',   rev: 40000,  qty: 8  },
-    { name: 'Teh',    rev: 24000,  qty: 3  },
-  ];
-  const maxRev = Math.max(...topProds.map(p => p.rev));
+  // derive top products from real transactions when available
+  const computeTopProds = (txList) => {
+    const m = Object.create(null);
+    for (const tx of txList) {
+      const items = Array.isArray(tx.items) ? tx.items : [];
+      for (const it of items) {
+        const name = it.name || it.product || it.product_id || (typeof it === 'string' ? it : 'unknown');
+        const qty = Number(it.qty || it.quantity || 1) || 1;
+        const rev = Number(it.price || it.price_at_sale || it.unit_price || 0) * qty;
+        if (!m[name]) m[name] = { name, rev: 0, qty: 0 };
+        m[name].rev += rev;
+        m[name].qty += qty;
+      }
+    }
+    return Object.values(m).sort((a, b) => b.rev - a.rev).slice(0, 5);
+  };
+
+  const topProds = computeTopProds(txs);
+  const maxRev = topProds.length ? Math.max(...topProds.map(p => p.rev)) : 0;
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
@@ -632,7 +798,7 @@ function ReportsScreen() {
         <div style={{ fontSize: 16, fontWeight: 600, color: '#f1f5f9', marginBottom: 3 }}>Laporan Harian</div>
         <div style={{ fontSize: 12, color: '#475569' }}>
           {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          &nbsp;·&nbsp; Node A, B, C (konsolidasi)
+          &nbsp;·&nbsp; Konsolidasi lokal + peer sync
         </div>
       </div>
 
@@ -685,7 +851,7 @@ function ReportsScreen() {
             Transaksi Terakhir
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {MOCK_TRANSACTIONS.map(tx => (
+            {txs.map(tx => (
               <div key={tx.id} style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 padding: '8px 12px', borderRadius: 8,
@@ -695,11 +861,11 @@ function ReportsScreen() {
                   <div style={{ fontSize: 11, color: '#818cf8', fontFamily: "'JetBrains Mono',monospace", marginBottom: 2 }}>
                     {tx.id}
                     <span style={{ marginLeft: 8, padding: '1px 6px', borderRadius: 3, background: '#1e293b', color: '#475569', fontSize: 10 }}>
-                      Node {tx.node}
+                      Node {tx.node || tx.node_id || '–'}
                     </span>
                   </div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>{tx.items}</div>
-                  <div style={{ fontSize: 10, color: '#334155' }}>{tx.cashier} · {tx.time}</div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>{typeof tx.items === 'string' ? tx.items : (Array.isArray(tx.items) ? tx.items.map(i => i.name || i.product_id).join(' + ') : '')}</div>
+                  <div style={{ fontSize: 10, color: '#334155' }}>{tx.cashier || tx.cashier_id || ''} · {tx.time || (tx.created_at ? new Date(tx.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '')}</div>
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#10b981', fontFamily: "'JetBrains Mono',monospace" }}>
                   {fmtRp(tx.total)}
@@ -715,17 +881,43 @@ function ReportsScreen() {
 
 /* ─── Sync Screen ──────────────────────────────────────────────── */
 function SyncScreen() {
-  const [nodes,       setNodes]       = useState(SYNC_NODES);
-  const [logs,        setLogs]        = useState([
-    '[Relay] Bootstrap relay aktif di ws://localhost:19300',
-    '[NodeA] UUID: 12ad3ef5... | SQLite OK | Automerge OK',
-    '[SyncEngine:A→B] SYNC_PUSH: transactions (6 changes)',
-    '[SyncEngine:A→B] SYNC_OPS → B: 24 ops (inventory)',
-    '[MergeVerifier] Hash A==B==C: dcefd63c ✅ KONVERGEN',
-  ]);
+  const [nodes,       setNodes]       = useState([]);
+  const [logs,        setLogs]        = useState([]);
   const [simulating,  setSimulating]  = useState(false);
-  const [syncPhase,   setSyncPhase]   = useState('synced');
+  const [syncPhase,   setSyncPhase]   = useState('offline');
   const logRef = useRef(null);
+
+  const fetchSync = useCallback(async () => {
+    if (!api?.getSyncInfo) return;
+    try {
+      const info = await api.getSyncInfo();
+      if (!info) return;
+      if (Array.isArray(info.nodes) && info.nodes.length) {
+        setNodes(info.nodes.map(n => ({
+          id: n.id, label: n.label || n.id, port: n.port || 0,
+          status: n.status || 'unknown', tx: n.tx || 0, hash: n.hash || '—',
+        })));
+      }
+      if (info.phase) setSyncPhase(info.phase);
+    } catch (err) {
+      console.error('[Sync] getSyncInfo failed:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSync();
+    const poll = setInterval(fetchSync, 10000);
+    const onSync = () => {
+      fetchSync();
+      setLogs(l => [...l.slice(-29), `[${new Date().toLocaleTimeString('id-ID')}] Sync event — data refreshed`]);
+    };
+    window.addEventListener('pos:sync', onSync);
+    if (api?.onSyncUpdate) api.onSyncUpdate(onSync);
+    return () => {
+      clearInterval(poll);
+      window.removeEventListener('pos:sync', onSync);
+    };
+  }, [fetchSync]);
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -764,7 +956,7 @@ function SyncScreen() {
     }, 5000);
   };
 
-  const allSame  = nodes.every(n => n.hash === nodes[0].hash && n.hash !== '—' && !n.hash.includes('...'));
+  const allSame  = nodes.length > 0 && nodes.every(n => n.hash === nodes[0].hash && n.hash !== '—' && !n.hash.includes('...'));
   const hashColor = allSame ? '#10b981' : syncPhase === 'offline' ? '#ef4444' : '#f59e0b';
 
   return (
@@ -803,8 +995,16 @@ function SyncScreen() {
       </div>
 
       {/* Node cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 18 }}>
-        {nodes.map(n => (
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${Math.min(Math.max(nodes.length, 1), 3)}, 1fr)`,
+        gap: 12, marginBottom: 18,
+      }}>
+        {nodes.length === 0 ? (
+          <div style={{ padding: 16, color: '#64748b', fontSize: 13 }}>
+            Menunggu data sync… Pastikan relay berjalan (`npm run relay`).
+          </div>
+        ) : nodes.map(n => (
           <div key={n.id} style={{
             background: '#0f172a',
             border: `1.5px solid ${n.status === 'online' && allSame ? 'rgba(99,102,241,.4)' : n.status === 'offline' ? 'rgba(239,68,68,.3)' : 'rgba(245,158,11,.3)'}`,
@@ -907,8 +1107,56 @@ function SyncScreen() {
 
 /* ─── App ───────────────────────────────────────────────────────── */
 export default function App() {
-  const [screen, setScreen] = useState('login');
-  const [user,   setUser]   = useState(null);
+  const [screen, setScreen]       = useState('login');
+  const [user,   setUser]         = useState(null);
+  const [syncInfo, setSyncInfo]   = useState(null);
+  const [systemStatus, setSystemStatus] = useState(null);
+
+  const refreshStatus = useCallback(async () => {
+    if (!api) return;
+    try {
+      const [sync, sys] = await Promise.all([
+        api.getSyncInfo?.() ?? null,
+        api.getSystemStatus?.() ?? null,
+      ]);
+      if (sync) setSyncInfo(sync);
+      if (sys) setSystemStatus(sys);
+    } catch (err) {
+      console.error('[App] status refresh failed:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!api) return;
+
+    if (api.onCheckout) {
+      api.onCheckout((data) => window.dispatchEvent(new CustomEvent('pos:checkout', { detail: data })));
+    }
+    if (api.onSyncUpdate) {
+      api.onSyncUpdate((data) => window.dispatchEvent(new CustomEvent('pos:sync', { detail: data })));
+    }
+    if (api.onProductsUpdated) {
+      api.onProductsUpdated(() => window.dispatchEvent(new Event('pos:products-updated')));
+    }
+
+    refreshStatus();
+    const poll = setInterval(refreshStatus, 15000);
+    window.addEventListener('pos:sync', refreshStatus);
+    window.addEventListener('pos:checkout', refreshStatus);
+
+    api.getSession?.().then(session => {
+      if (session?.userId) {
+        setUser({ id: session.userId, name: session.name, role: session.role });
+        setScreen('pos');
+      }
+    }).catch(() => {});
+
+    return () => {
+      clearInterval(poll);
+      window.removeEventListener('pos:sync', refreshStatus);
+      window.removeEventListener('pos:checkout', refreshStatus);
+    };
+  }, [refreshStatus]);
 
   const onLogin  = (u)  => { setUser(u); setScreen('pos'); };
   const onLogout = ()   => { if (api) api.logout(); setUser(null); setScreen('login'); };
@@ -917,14 +1165,14 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header user={user} screen={screen} setScreen={setScreen} onLogout={onLogout} />
+      <Header user={user} screen={screen} setScreen={setScreen} onLogout={onLogout} syncInfo={syncInfo} />
       <main className="app-main">
-        {screen === 'pos'       && <POSScreen />}
+        {screen === 'pos'       && <POSScreen user={user} />}
         {screen === 'inventory' && <InventoryScreen />}
         {screen === 'reports'   && <ReportsScreen />}
         {screen === 'sync'      && <SyncScreen />}
       </main>
-      <StatusBar />
+      <StatusBar systemStatus={systemStatus} syncInfo={syncInfo} />
     </div>
   );
 }

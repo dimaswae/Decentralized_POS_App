@@ -124,6 +124,8 @@ class DocManager {
           price:      product.price,
           category:   product.category || 'umum',
           unit:       product.unit     || 'pcs',
+          icon:       product.icon     || '📦',
+          low:        product.low      ?? 10,
           updated_at: Date.now(),
           node_id:    this.nodeId,
         };
